@@ -104,6 +104,93 @@ class TronClassAPI:
         except requests.exceptions.RequestException as e:
             return {"error": f"Error fetching courses: {str(e)}"}
 
+    async def upload_file(self,file_path:str):
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+
+        metadata_url = "https://iclass.tku.edu.tw/api/uploads"
+
+        headers_metadata = {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json;charset=UTF-8",
+            "Origin": "https://iclass.tku.edu.tw",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)..."
+        }
+
+        metadata_payload = {
+            "name": file_name,
+            "size": file_size,
+            "parent_type": None,
+            "parent_id": 0,
+            "is_scorm": False,
+            "is_wmpkg": False,
+            "source": "",
+            "is_marked_attachment": False,
+            "embed_material_type": ""
+        }
+        response_metadata = self.session.post(
+            metadata_url,
+            headers=headers_metadata,
+            data=json.dumps(metadata_payload)
+        )
+
+        if response_metadata.status_code != 201:
+            print("❌ Failed to get upload URL")
+            print(response_metadata.status_code, response_metadata.text)
+            return {"error":f"Failed to get upload URL, status_code:{response_metadata.status_code}"}
+
+        upload_info = response_metadata.json()
+        upload_url = upload_info["upload_url"]
+        upload_file_name = upload_info["name"]
+        upload_file_id = upload_info["id"]
+        upload_file_type = upload_info["type"]
+
+        print(f"✅ Got upload URL:\n{upload_url}")
+
+        with open(file_path, 'rb') as f:
+            files = {
+                'file': (upload_file_name, f, upload_file_type)
+            }
+            headers_upload = {
+                "Origin": "https://iclass.tku.edu.tw",
+                "Referer": "https://iclass.tku.edu.tw/",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)..."
+            }
+
+            upload_response = self.session.put(upload_url, files=files, headers=headers_upload)
+
+            print(f"📤 Upload response: {upload_response.status_code}")
+            print(upload_response.text)
+            print(f"Upload file id {upload_file_id}")
+        return upload_file_id
+    
+    async def submit_homework(self, activity_id, upload_ids:list):
+        url = f'https://iclass.tku.edu.tw/api/course/activities/{activity_id}/submissions'
+
+        headers = {
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'content-type': 'application/json;charset=UTF-8',
+        'origin': 'https://iclass.tku.edu.tw',
+        }
+
+        payload = {
+            "comment": "",
+            "uploads": upload_ids,  # List of uploaded file IDs
+            "slides": [],
+            "is_draft": False,
+            "mode": "normal",
+            "other_resources": [],
+            "uploads_in_rich_text": []
+        }
+
+        response = self.session.post(url, headers=headers, data=json.dumps(payload))
+
+        if response.ok:
+            return {"Submission successful",response.status_code, response.text}
+        else:
+            return {"Submission failed", response.status_code, response.text}
+
 # =============================================================================
 # MCP Server
 # =============================================================================
